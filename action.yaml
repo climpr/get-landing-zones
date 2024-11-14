@@ -1,0 +1,73 @@
+name: Get Landing Zone
+description: Outputs the list of Landing Zone objects.
+
+inputs:
+  root-landing-zones-path:
+    description: Root directory for Landing Zones. Supports multi-line input.
+    required: true
+
+  pattern:
+    description: Filter Landing Zones based on regex pattern. Matches against the Landing Zone name (Directory name).
+    required: false
+
+  filter-on-changed-files:
+    description: "Include only changed files. Supports 'true' or 'false'."
+    required: false
+
+outputs:
+  landing-zones:
+    description: List of Landing Zone
+    value: ${{ steps.get-landing-zone.outputs.landing-zones }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create root directories array
+      id: create-root-dir-array
+      shell: pwsh
+      env:
+        rootLandingZonesPath: ${{ inputs.root-landing-zones-path }}
+      run: |
+        #* Create root directories array
+        $arr = $env:rootLandingZonesPath -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $rootLandingZonesPaths = ($arr | ConvertTo-Json -Compress -AsArray) ?? "[]"
+        $arr | ForEach-Object { "$_/**" } | Out-File -Path "changedfiles_files_input.txt"
+        Write-Output "root-landing-zones-paths=$($rootLandingZonesPaths)" >> $env:GITHUB_OUTPUT
+
+    - name: Get Changed Files
+      id: changed-files
+      uses: tj-actions/changed-files@v45
+      with:
+        json: true
+        escape_json: false
+        files_from_source_file: "changedfiles_files_input.txt"
+        separator: "|"
+
+    - name: Get Landing Zones
+      id: get-landing-zones
+      shell: pwsh
+      env:
+        rootLandingZonesPaths: ${{ steps.create-root-dir-array.outputs.root-landing-zones-paths }}
+        pattern: ${{ inputs.pattern }}
+        filterOnChangedFiles: ${{ inputs.filter-on-changed-files == 'true' }}
+        changedFiles: ${{ steps.changed-files.outputs.all_changed_files }}
+        actionPath: ${{ github.action_path }}
+        debug: ${{ runner.debug }}
+      run: |
+        #* Get-LandingZones.ps1
+
+        #* Set debug preference from runner configuration
+        $DebugPreference = [bool]$env:debug ? "Continue" : "SilentlyContinue"
+
+        $param = @{
+          RootLandingZonesPath = $env:rootLandingZonesPaths | ConvertFrom-Json
+          Pattern              = $env:pattern
+          FilterOnChangedFiles = ([bool]::Parse($env:filterOnChangedFiles))
+          ChangedFiles         = $env:changedFiles | ConvertFrom-Json -Depth 3
+        }
+
+        $landingZones = & "$($env:actionPath)/src/Get-LandingZones.ps1" @param
+
+        #* Write outputs
+        $jsonResult = ($landingZones | Where-Object { $_.Deploy } | ConvertTo-Json -Compress -AsArray) ?? "[]"
+        Write-Output "landing-zones=$($jsonResult)" >> $env:GITHUB_OUTPUT
