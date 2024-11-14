@@ -1,4 +1,4 @@
-name: Get Landing Zone
+name: Get Landing Zones
 description: Outputs the list of Landing Zone objects.
 
 inputs:
@@ -16,8 +16,8 @@ inputs:
 
 outputs:
   landing-zones:
-    description: List of Landing Zone
-    value: ${{ steps.get-landing-zone.outputs.landing-zones }}
+    description: List of Landing Zones
+    value: ${{ steps.get-landing-zones.outputs.landing-zones }}
 
 runs:
   using: composite
