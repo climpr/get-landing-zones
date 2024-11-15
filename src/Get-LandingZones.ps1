@@ -41,7 +41,7 @@ $landingZones = @(Get-ChildItem $validDirectories -File -Recurse `
 Write-Debug "Found $($landingZones.Count) landing zones."
 
 $landingZoneObjects = foreach ($lz in $landingZones) {
-    $lzRelativePath = Resolve-Path -Relative -Path $lz.FullName
+    $lzRelativePath = (Resolve-Path -Relative -Path $lz.FullName) -replace "^\./"
     Write-Debug "[$($lz.Name)] Processing started."
     Write-Debug "[$($lz.Name)] Landing Zones directory path: '$lzRelativePath'."
 
@@ -62,29 +62,34 @@ $landingZoneObjects = foreach ($lz in $landingZones) {
     }
 
     #* Resolve modified state
-    if ($FilterOnChangedFiles) {
-        Write-Debug "[$lzName] Checking if any Landing Zone files have been modified."
-        $modified = $false
-        foreach ($changedFile in $changedFiles) {
-            if (!(Test-Path $changedFile)) {
-                continue
+    if ($landingZoneObject.Deploy) {
+        if ($FilterOnChangedFiles) {
+            Write-Debug "[$lzName] Checking if any Landing Zone files have been modified."
+            $modified = $false
+            foreach ($changedFile in $changedFiles) {
+                if (!(Test-Path $changedFile)) {
+                    continue
+                }
+                if ($modified) {
+                    break
+                }
+                $modified = $changedFile.StartsWith("$lzRelativePath/")
             }
+            
             if ($modified) {
-                break
+                Write-Debug "[$lzName] At least one of the files used by the Landing Zone have been modified. Landing Zone included."
             }
-            $modified = $changedFile.StartsWith("$lzRelativePath/")
-        }
-        
-        if ($modified) {
-            Write-Debug "[$lzName] At least one of the files used by the Landing Zone have been modified. Landing Zone included."
+            else {
+                $landingZoneObject.Deploy = $false
+                Write-Debug "[$lzName] No files used by the Landing Zone have been modified. Landing Zone not included."
+            }
         }
         else {
-            $landingZoneObject.Deploy = $false
-            Write-Debug "[$lzName] No files used by the Landing Zone have been modified. Landing Zone not included."
+            Write-Debug "[$lzName] Skipping modified files check due to parameter. FilterOnChangedFiles parameter set to [$false]. Landing Zone included."
         }
     }
     else {
-        Write-Debug "[$lzName] Skipping modified files check due to parameter. FilterOnChangedFiles parameter set to [$false]. Landing Zone included."
+        Write-Debug "[$lzName] Skipping modified files check. Landing Zone already not included."
     }
 
     #* Filter based on pattern
